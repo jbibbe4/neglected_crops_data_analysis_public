@@ -110,15 +110,15 @@ RESULTS_FOLDER <- "onedrive_results_folder"
 DATA_TABLE_PATH <- paste0(RESULTS_FOLDER, "/final_table_20260824.csv")
 
 # combined final figure
-OUTFIG_SVG_PATH <- paste0(RESULTS_FOLDER, "/figs/20261015_combined_figure.svg")
-PANELA_SVG_PATH <- paste0(RESULTS_FOLDER, "/figs/20261015_panelA.svg")
+OUTFIG_SVG_PATH <- paste0(RESULTS_FOLDER, "/figs/20261105_combined_figure.svg")
+PANELA_SVG_PATH <- paste0(RESULTS_FOLDER, "/figs/20261105_panelA.svg")
 
-PANELA_PPT <- paste0(RESULTS_FOLDER, "/figs/20261015_panelA_ppt.svg")
-PANELB_PPT <- paste0(RESULTS_FOLDER, "/figs/20261015_panelB_ppt.svg")
-PANELC_PPT <- paste0(RESULTS_FOLDER, "/figs/20261015_panelC_ppt.svg")
-PANELD_PPT <- paste0(RESULTS_FOLDER, "/figs/20261015_panelD_ppt.svg")
-PANELE_PPT <- paste0(RESULTS_FOLDER, "/figs/20261015_panelE_ppt.svg")
-PANELF_PPT <- paste0(RESULTS_FOLDER, "/figs/20261015_panelF_ppt.svg")
+PANELA_PPT <- paste0(RESULTS_FOLDER, "/figs/20261105_panelA_ppt.svg")
+PANELB_PPT <- paste0(RESULTS_FOLDER, "/figs/20261105_panelB_ppt.svg")
+PANELC_PPT <- paste0(RESULTS_FOLDER, "/figs/20261105_panelC_ppt.svg")
+PANELD_PPT <- paste0(RESULTS_FOLDER, "/figs/20261105_panelD_ppt.svg")
+PANELE_PPT <- paste0(RESULTS_FOLDER, "/figs/20261105_panelE_ppt.svg")
+PANELF_PPT <- paste0(RESULTS_FOLDER, "/figs/20261105_panelF_ppt.svg")
 
 # ==============================================================================
 # D. PUBLICATION THEME
@@ -239,7 +239,8 @@ plot_df <- crops_table_raw %>%
     )
   ) %>%
   mutate(
-    status_wo_both = if_else(Status == "Both", "Well-Researched Plant", Status),
+    is_NUS = Status %in% c("NUS", "Both"),
+    is_well_researched = Status %in% c("Well-Researched Plant", "Both"),
     .after = Status
   ) %>%
   # add a resources_summary column that converts genome, trans and regen into str categories like T_T_F
@@ -250,6 +251,27 @@ plot_df <- crops_table_raw %>%
       if_else(regen_available, "T", "F")
     )
   )
+
+# check
+plot_df %>%
+  summarise(
+    n_NUS = sum(is_NUS),
+    n_well_researched = sum(is_well_researched),
+    n_NUS_only = sum(Status == "NUS"),
+    n_well_researched_only = sum(Status == "Well-Researched Plant"),
+    n_both = sum(Status == "Both")
+  )
+
+# create duplicated analysis table to deal with the "Both" status species
+plot_membership <- bind_rows(
+  plot_df %>%
+    filter(is_NUS) %>%
+    mutate(status_group = "NUS"),
+  
+  plot_df %>%
+    filter(is_well_researched) %>%
+    mutate(status_group = "Well-Researched")
+)
 
 # ----- 1.5 Annotation data for panel A -----
 
@@ -326,7 +348,7 @@ names(family_cols) <- family_nodes
 # and add a legend below Panel A with their names
 
 top5_families <- plot_df %>%
-  filter(status_wo_both == "NUS") %>%
+  filter(is_NUS) %>%
   count(Family, name = "n_NUS") %>%
   arrange(desc(n_NUS)) %>%
   slice_head(n = 5) %>%
@@ -485,12 +507,10 @@ cor.test(
 # ==============================================================================
 
 # summarize % NUS versus % well-researched plants that have resources available for them
-summary_df <- plot_df %>%
-  count(status_wo_both, resources_available) %>%
-  group_by(status_wo_both) %>%
-  mutate(
-    pct = 100 * n / sum(n)
-  ) %>%
+summary_df <- plot_membership %>%
+  count(status_group, resources_available) %>%
+  group_by(status_group) %>%
+  mutate(pct = 100 * n / sum(n)) %>%
   ungroup() %>%
   pivot_wider(
     names_from = resources_available,
@@ -598,8 +618,8 @@ panel_A <- panel_A +
     ),
     name = "Infrastructure availability"
   ) +
-  # pub_theme +
-  ppt_theme +
+  pub_theme +
+  #ppt_theme +
   theme(
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
@@ -624,8 +644,8 @@ legend_highlight <- tibble(
 )
 
 # for powerpoint: legend text size 13 resp 12 (title and rest) instead of 9 and 8
-LEG_TITLE_SIZE <- 13 / .pt
-LEG_TEXT_SIZE <- 12 / .pt
+LEG_TITLE_SIZE <- 9 / .pt
+LEG_TEXT_SIZE <- 8 / .pt
 panel_A_legend <-
   ggplot(legend_df) +
   annotate(
@@ -694,22 +714,19 @@ panel_A_legend <-
 
 # save for presentation, 
 panel_A_all <- panel_A / panel_A_legend + plot_layout(heights = c(7, 0.2), widths = c(7, 7))
-ggsave(PANELA_PPT, plot = panel_A_all, width = 28, height = 28, units = "cm")
+# ggsave(PANELA_PPT, plot = panel_A_all, width = 28, height = 28, units = "cm")
 
 # ----- 3.2 Panel B: top-5 families resources (sorted by mean availability) -----
 
 # top-5 families sorted by average % of resources present
 top_families <- plot_df %>%
-  filter(status_wo_both == "NUS") %>%
+  filter(is_NUS) %>%
   count(Family, name = "n_NUS") %>%
   arrange(desc(n_NUS)) %>%
   slice_head(n = 5)
 
 family_summary <- plot_df %>%
-  filter(
-    status_wo_both == "NUS",
-    Family %in% top_families$Family
-  ) %>%
+  filter(is_NUS, Family %in% top_families$Family) %>%
   group_by(Family) %>%
   summarise(
     n_NUS = n(),
@@ -731,9 +748,9 @@ family_labels <- family_summary %>%
   tibble::deframe()
 
 # text on bar plots: 2.5 for publication figure, 12pt for ppt
-PCT_TEXT_SIZE <- 12 / .pt
+PCT_TEXT_SIZE <- 2.5
 panel_B <- plot_df %>%
-  filter(Family %in% top_families$Family, status_wo_both == "NUS") %>%
+  filter(Family %in% top_families$Family, is_NUS) %>%
   mutate(
     Family = factor(Family, levels = family_summary$Family)
   ) %>%
@@ -787,31 +804,24 @@ panel_B <- plot_df %>%
         y = "Percentage of taxa",
         fill = "Infrastructure availability for Neglected Crops in 5 major families"
       ) +
-      #pub_theme
-      ppt_theme
+      pub_theme
+      #ppt_theme
   }
 
 # save for presentation
-ggsave(PANELB_PPT, plot = panel_B, width = 30, height = 10, units = "cm")
+# ggsave(PANELB_PPT, plot = panel_B, width = 30, height = 10, units = "cm")
 
 # ----- 3.3 Panel C: CRISPR possible stacked bar -----
 
-panel_C <- plot_df %>%
-  mutate(
-    crispr_possible = if_else(resources_available == "all", "Yes", "No"),
-    status_wo_both = case_when(
-      status_wo_both == "Well-Researched Plant" ~ "Well-\nResearched",
-      status_wo_both == "NUS" ~ "Neglected",
-      TRUE ~ status_wo_both
-    )
-  ) %>%
-  count(status_wo_both, crispr_possible) %>%
-  group_by(status_wo_both) %>%
+panel_C <- plot_membership %>%
+  mutate(crispr_possible = if_else(resources_available == "all", "Yes", "No")) %>%
+  count(status_group, crispr_possible) %>%
+  group_by(status_group) %>%
   mutate(
     pct = 100 * n / sum(n)
   ) %>%
   ungroup() %>%
-  ggplot(aes(x = status_wo_both, y = pct, fill = crispr_possible)) +
+  ggplot(aes(x = status_group, y = pct, fill = crispr_possible)) +
   geom_col(position = "stack") +
   geom_text(
     aes(label = sprintf("%.0f%%", pct)),
@@ -824,13 +834,19 @@ panel_C <- plot_df %>%
       No = "#D55E00"
     )
   ) +
+  scale_x_discrete(
+    labels = c(
+      "NUS" = "Neglected",
+      "Well-Researched" = "Well-\nResearched"
+    )
+  ) +
   labs(
     x = NULL,
     y = "Percentage of taxa",
-    fill = "CRISPR possible"
+    fill = "All infrastructures available"
   ) +
-  #pub_theme + theme(legend.direction = "vertical")
-  ppt_theme
+  pub_theme + theme(legend.direction = "vertical")
+  #ppt_theme
   
 
 # save for presentation
@@ -838,21 +854,14 @@ ggsave(PANELC_PPT, plot = panel_C, width = 14, height = 12, units = "cm")
 
 # ----- 3.4 Panel D: each resource T/F for NUS vs well-researched plants -----
 
-panel_D <- plot_df %>%
-  mutate(
-    status_wo_both = recode(
-      status_wo_both,
-      "Well-Researched Plant" = "Well-Researched",
-      "NUS" = "Neglected"
-    )
-  ) %>%
+panel_D <- plot_membership %>%
   pivot_longer(
     cols = c(genome_available, trans_available, regen_available),
     names_to = "resource",
     values_to = "available"
   ) %>%
-  count(status_wo_both, resource, available) %>%
-  group_by(status_wo_both, resource) %>%
+  count(status_group, resource, available) %>%
+  group_by(status_group, resource) %>%
   mutate(
     pct = 100 * n / sum(n),
     resource = factor(
@@ -863,7 +872,15 @@ panel_D <- plot_df %>%
   ungroup() %>%
   {
     ggplot(., aes(x = resource, y = pct, fill = available)) +
-      facet_wrap(~status_wo_both) +
+      facet_wrap(
+        ~status_group,
+        labeller = labeller(
+          status_group = c(
+            "NUS" = "Neglected",
+            "Well-Researched" = "Well-Researched"
+          )
+        )
+      ) +
       geom_col(position = "stack") +
       geom_text(
         aes(label = sprintf("%.0f%%", pct)),
@@ -891,8 +908,8 @@ panel_D <- plot_df %>%
         y = NULL, # will be next to Panel C with the exact same x label "Percentage of taxa"
         fill = "Infrastructure availability"
       ) +
-      #pub_theme + theme(legend.direction = "vertical")
-      ppt_theme
+      pub_theme + theme(legend.direction = "vertical")
+      #ppt_theme
   }
 
 # save for presentation
@@ -901,21 +918,18 @@ ggsave(PANELD_PPT, plot = panel_D, width = 14, height = 12, units = "cm")
 # ----- 3.5 Panel E: NUS resource-availability dot matrix + bar -----
 
 # intermediate data
-summarized_df <- plot_df %>%
-  count(status_wo_both, resources_summary) %>%
-  group_by(status_wo_both) %>%
+NUS_df <- plot_df %>%
+  filter(is_NUS) %>%
+  count(resources_summary) %>%
   mutate(
     pct = 100 * n / sum(n)
   ) %>%
   ungroup() %>%
-  left_join(unique(plot_df %>% select(resources_summary, genome_available, trans_available, regen_available)), by = "resources_summary")
-
-NUS_df <- summarized_df %>%
-  filter(status_wo_both == "NUS") %>%
+  left_join(unique(plot_df %>% select(resources_summary, genome_available, trans_available, regen_available)), by = "resources_summary") %>%
   mutate(
     resources_summary = factor(
       resources_summary,
-      levels = c("T_T_T", "T_T_F", "T_F_T", "F_T_T", "T_F_F", "F_T_F", "F_F_T", "F_F_NA", "F_F_F")
+      levels = c("T_T_T", "T_T_F", "T_F_T", "F_T_T", "T_F_F", "F_T_F", "F_F_T", "F_F_F")
     )
   ) %>%
   arrange(desc(resources_summary))
@@ -975,8 +989,8 @@ pgenomes <- ggplot() +
   ) +
   labs(y = NULL, x = NULL) +
   guides(y = "none", fill = "none") +
-  #pub_theme +
-  ppt_theme +
+  pub_theme +
+  #ppt_theme +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     axis.line = element_blank(),
@@ -990,8 +1004,8 @@ pcount <- ggplot(NUS_df, aes(x = pct, y = resources_summary)) +
   geom_col() +
   labs(y = NULL, x = NULL) +
   guides(y = "none") +
-  #pub_theme +
-  ppt_theme +
+  pub_theme +
+  #ppt_theme +
   scale_x_continuous(labels = scales::percent_format(scale = 1))
 
 pgenomes <- pgenomes +
@@ -1045,8 +1059,8 @@ panel_F <- ggplot(
   ) +
   xlab("Distance to closest well-researched species") +
   ylab("Number of infrastructures available") +
-  #pub_theme +
-  ppt_theme +
+  pub_theme +
+  #ppt_theme +
   theme(
     axis.text.x = element_text(
       angle = 30,
